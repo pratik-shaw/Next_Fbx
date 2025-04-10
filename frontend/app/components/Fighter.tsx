@@ -1,15 +1,14 @@
 "use client"
-import React, { useEffect, useRef, Suspense } from 'react';
+import React, { useEffect, useRef, Suspense, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Group, Mesh, Material, Object3D } from 'three';
-import * as THREE from 'three';
+import { Group, Mesh, Material, Object3D, Vector3, Euler } from 'three';
 import { useLoader } from '@react-three/fiber';
 import { FBXLoader } from 'three-stdlib';
 
 // Define type for the FBX model
 type FBXModel = Object3D & {
-  scale: THREE.Vector3;
-  rotation: THREE.Euler;
+  scale: Vector3;
+  rotation: Euler;
   traverse: (callback: (object: Object3D) => void) => void;
   clone: () => FBXModel;
 };
@@ -30,57 +29,73 @@ const FighterModel: React.FC<FighterModelProps> = ({
   scale = 0.000025
 }) => {
   const modelRef = useRef<Group>(null);
+  const initialPositionY = position[1]; // Store the initial Y position
   
-  // Set up the model when it's loaded
-  useEffect(() => {
-    if (fbx && modelRef.current) {
-      // Apply the clone to the ref so we can animate it
-      const model = fbx.clone();
-      
-      // Scale the model
-      model.scale.set(scale, scale, scale);
-      
-      // Apply material adjustments
-      model.traverse((child: THREE.Object3D) => {
-        if (child instanceof Mesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-          
-          // Apply material adjustments if needed
-          if (child.material) {
-            const material = child.material as Material & { metalness?: number; roughness?: number };
-            if (typeof material.metalness !== 'undefined') {
-              material.metalness = 0.5;
-            }
-            if (typeof material.roughness !== 'undefined') {
-              material.roughness = 0.5;
-            }
+  // Create a memoized model clone to prevent recreation on re-renders
+  const modelClone = useMemo(() => {
+    const model = fbx.clone();
+    
+    // Scale the model
+    model.scale.set(scale, scale, scale);
+    
+    // Apply material adjustments
+    model.traverse((child: Object3D) => {
+      if (child instanceof Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        
+        // Apply material adjustments if needed
+        if (child.material) {
+          const material = child.material as Material & { metalness?: number; roughness?: number };
+          if (typeof material.metalness !== 'undefined') {
+            material.metalness = 0.5;
+          }
+          if (typeof material.roughness !== 'undefined') {
+            material.roughness = 0.5;
           }
         }
-      });
-      
-      // Add the model to our ref
-      modelRef.current.add(model);
-    }
+      }
+    });
+    
+    return model;
   }, [fbx, scale]);
   
-  // Keep the subtle hovering animation
-  useFrame((state) => {
+  // Set up the model only once
+  useEffect(() => {
     if (modelRef.current) {
-      // Gentle hovering animation
-      modelRef.current.position.y = Math.sin(state.clock.elapsedTime * 0.5 + position[0]) * 0.1;
+      modelRef.current.add(modelClone);
+      
+      // Save the current ref to avoid the stale closure issue in cleanup
+      const currentRef = modelRef.current;
+      
+      // Cleanup function to remove the model when component unmounts
+      return () => {
+        if (currentRef) {
+          currentRef.remove(modelClone);
+        }
+      };
     }
+  }, [modelClone]);
+  
+  // Optimize animation by using a reference to track the last frame time
+  const animationRef = useRef({
+    time: 0,
+    offset: position[0] // Use position[0] as an offset for variety
   });
   
-  // Typescript expects specific tuple types for position and rotation
-  const positionTuple: [number, number, number] = position;
-  const rotationTuple: [number, number, number] = rotation;
+  useFrame((state) => {
+    if (modelRef.current) {
+      // Calculate the hover effect more efficiently
+      const hoverAmount = Math.sin(state.clock.elapsedTime * 0.5 + animationRef.current.offset) * 0.1;
+      modelRef.current.position.y = initialPositionY + hoverAmount;
+    }
+  });
   
   return (
     <group 
       ref={modelRef} 
-      position={positionTuple} 
-      rotation={rotationTuple}
+      position={position} 
+      rotation={rotation}
     />
   );
 };
@@ -92,7 +107,7 @@ interface FighterProps {
   scale?: number;
 }
 
-// Fighter loader component - this loads the FBX once and reuses it
+// Fighter loader component with memoized model loading
 const Fighter: React.FC<FighterProps> = ({ 
   position = [0, 0, 0],
   rotation = [0, 0, 0],
@@ -112,16 +127,23 @@ const Fighter: React.FC<FighterProps> = ({
 };
 
 // A wrapper component that handles loading state with Suspense
-const FighterWithSuspense: React.FC<FighterProps> = ({ 
+const FighterWithSuspense = React.memo(({ 
   position = [0, 0, 0],
   rotation = [0, 0, 0],
   scale = 0.000025
-}) => {
+}: FighterProps) => {
   return (
     <Suspense fallback={null}>
-      <Fighter position={position} rotation={rotation} scale={scale} />
+      <Fighter 
+        position={position as [number, number, number]} 
+        rotation={rotation as [number, number, number]} 
+        scale={scale} 
+      />
     </Suspense>
   );
-};
+});
+
+// Add display name to fix ESLint error
+FighterWithSuspense.displayName = 'FighterWithSuspense';
 
 export default FighterWithSuspense;

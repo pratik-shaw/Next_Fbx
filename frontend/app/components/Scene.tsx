@@ -738,7 +738,7 @@ const Scene = () => {
         </Suspense>
         
         {/* Camera rotation for cinematic movement */}
-        <CameraRotation speed={0.05} />
+        <CameraRotation speed={0.2} />
         
         <Stats />
       </Canvas>
