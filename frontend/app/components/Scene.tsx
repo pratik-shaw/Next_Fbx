@@ -7,6 +7,8 @@ import { OrbitControls, Stats, Stars, Trail, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import Model from './Model';
 import Fighter from './Fighter';
+import CameraPositionDebugger from './CameraPositionDebugger';
+import ScrollableCameraController from './ScrollableCameraController';
 
 // Type definition for Fighter positions
 interface FighterPosition {
@@ -38,13 +40,55 @@ interface CameraRotationProps {
   speed?: number;
 }
 
+
 // Performance optimization - reusable geometries and materials
 const createReusableGeometries = () => {
   const sphereGeometry = new THREE.SphereGeometry(1, 16, 16);
   const particleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
   return { sphereGeometry, particleGeometry };
 };
+// Component to track and display current waypoint index
+const WaypointTracker = ({ waypoints, onChange }: { 
+  waypoints: Array<{
+    position: [number, number, number]; name?: string 
+}>, 
+  onChange: (index: number) => void 
+}) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const { camera } = useThree();
 
+  // Check which waypoint is closest to current camera position
+  useEffect(() => {
+    const checkWaypoint = () => {
+      const cameraPos = camera.position.clone();
+      let closestIndex = 0;
+      let closestDistance = Infinity;
+
+      waypoints.forEach((wp, index) => {
+        const waypointPos = new THREE.Vector3(...(wp.position as [number, number, number]));
+        const distance = cameraPos.distanceTo(waypointPos);
+        
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = index;
+        }
+      });
+
+      if (closestIndex !== currentIndex) {
+        setCurrentIndex(closestIndex);
+        onChange(closestIndex);
+      }
+    };
+
+    // Check initially and add a frame callback
+    checkWaypoint();
+    const interval = setInterval(checkWaypoint, 500);
+    
+    return () => clearInterval(interval);
+  }, [camera, waypoints, currentIndex, onChange]);
+
+  return null;
+};
 const createReusableMaterials = () => {
   const nebulaMaterials = [
     new THREE.MeshBasicMaterial({ color: "#150a30", transparent: true, opacity: 0.4 }),
@@ -184,13 +228,15 @@ interface MotionTrailProps {
 }
 
 // Camera controller component
+// Update your CameraRotation component
 const CameraRotation = ({ speed = 0.05 }: CameraRotationProps) => {
   const { camera } = useThree();
   const orbitControlsRef = useRef<any>(null);
   
   // Set up initial position
   useEffect(() => {
-    camera.position.set(100, 100, 10);
+    // Only set the initial position when the component mounts
+    camera.position.set(5, 5, 7);
     camera.lookAt(0, 0, 0);
   }, [camera]);
   
@@ -694,9 +740,131 @@ const MainShipMovement = () => {
 
 // Main Scene component with performance optimizations
 const Scene = () => {
+  // State for active camera control mode
+  const [activeCameraControl, setActiveCameraControl] = useState<'orbit' | 'scroll' | 'debug'>('orbit');
+  
+  // State to track current waypoint for UI
+  const [currentWaypointIndex, setCurrentWaypointIndex] = useState(0);
+
   // Preload Fighter model
   useGLTF.preload('./Fighter');
   
+  // Define camera waypoints with proper typing
+  const cameraWaypoints: Array<{
+    position: [number, number, number];
+    lookAt: [number, number, number];
+    name?: string;
+  }> = [
+    {
+      position: [5, 5, 7] as [number, number, number],
+      lookAt: [0, 0, 0] as [number, number, number],
+      name: "Overview"
+    },
+    {
+      position: [0, 3, 10] as [number, number, number],
+      lookAt: [0, 0, 0] as [number, number, number],
+      name: "Front View"
+    },
+    {
+      position: [10, 6, -5] as [number, number, number],
+      lookAt: [0, 0, 0] as [number, number, number],
+      name: "Side View"
+    },
+    {
+      position: [3, 8, 3] as [number, number, number],
+      lookAt: [0, 0, 0] as [number, number, number],
+      name: "Top View"
+    },
+    {
+      position: [8, 1, 8] as [number, number, number],
+      lookAt: [0, 0.5, 0] as [number, number, number],
+      name: "Detail View"
+    }
+  ];
+  
+  // Handle waypoint change
+  const handleWaypointChange = (index: number) => {
+    setCurrentWaypointIndex(index);
+  };
+  
+  // Camera control panel component
+  const CameraControlPanel = () => {
+    // Get waypoint names for display
+    const waypointNames = cameraWaypoints.map(wp => wp.name || "Unnamed Waypoint");
+    
+    return (
+      <div style={{
+        position: 'absolute',
+        bottom: '20px',
+        right: '20px',
+        background: 'rgba(0, 0, 0, 0.7)',
+        padding: '10px',
+        borderRadius: '5px',
+        color: 'white',
+        fontFamily: 'monospace',
+        zIndex: 100
+      }}>
+        <div style={{ marginBottom: '10px', fontWeight: 'bold' }}>Camera Controls</div>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+          <button
+            onClick={() => setActiveCameraControl('orbit')}
+            style={{
+              padding: '5px 10px',
+              background: activeCameraControl === 'orbit' ? '#4CAF50' : '#333',
+              border: 'none',
+              borderRadius: '3px',
+              color: 'white',
+              cursor: 'pointer'
+            }}
+          >
+            Orbit
+          </button>
+          <button
+            onClick={() => setActiveCameraControl('scroll')}
+            style={{
+              padding: '5px 10px',
+              background: activeCameraControl === 'scroll' ? '#2196F3' : '#333',
+              border: 'none',
+              borderRadius: '3px',
+              color: 'white',
+              cursor: 'pointer'
+            }}
+          >
+            Scroll
+          </button>
+          <button
+            onClick={() => setActiveCameraControl('debug')}
+            style={{
+              padding: '5px 10px',
+              background: activeCameraControl === 'debug' ? '#FF9800' : '#333',
+              border: 'none',
+              borderRadius: '3px',
+              color: 'white',
+              cursor: 'pointer'
+            }}
+          >
+            Debug
+          </button>
+        </div>
+        
+        {activeCameraControl === 'scroll' && (
+          <div style={{ fontSize: '12px', marginTop: '8px' }}>
+            <div><strong>Current:</strong> {waypointNames[currentWaypointIndex]}</div>
+            <div style={{ marginTop: '5px', fontSize: '11px', opacity: 0.8 }}>
+              {currentWaypointIndex > 0 && (
+                <span>Scroll ↑ for {waypointNames[currentWaypointIndex - 1]}</span>
+              )}
+              {currentWaypointIndex > 0 && currentWaypointIndex < cameraWaypoints.length - 1 && <br />}
+              {currentWaypointIndex < cameraWaypoints.length - 1 && (
+                <span>Scroll ↓ for {waypointNames[currentWaypointIndex + 1]}</span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={{ width: '100%', height: '100vh', background: '#000000' }}>
       <Canvas
@@ -706,14 +874,13 @@ const Scene = () => {
           antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.3,
-          // Performance optimizations
           powerPreference: 'high-performance',
-          precision: 'mediump', // Use medium precision for better performance
+          precision: 'mediump',
           depth: true,
-          stencil: false, // Disable stencil buffer if not needed
-          alpha: false // Disable alpha if not needed
+          stencil: false,
+          alpha: false
         }}
-        dpr={[1, 2]} // Limit DPR for performance
+        dpr={[1, 2]}
       >
         {/* Deep space background */}
         <color attach="background" args={['#05050f']} />
@@ -727,7 +894,7 @@ const Scene = () => {
         {/* Improved lighting setup */}
         <SceneLighting />
         
-        {/* Original model - main spaceship with subtle movement */}
+        {/* Main spaceship with subtle movement */}
         <Suspense fallback={null}>
           <MainShipMovement />
         </Suspense>
@@ -737,11 +904,107 @@ const Scene = () => {
           <FighterFormation />
         </Suspense>
         
-        {/* Camera rotation for cinematic movement */}
-        <CameraRotation speed={0.2} />
+        {/* Camera controls based on active mode */}
+        {activeCameraControl === 'orbit' && <CameraRotation speed={0.2} />}
+        {activeCameraControl === 'scroll' && (
+          <ScrollableCameraController
+            waypoints={cameraWaypoints}
+            scrollThreshold={0.1}
+            transitionDuration={1200}
+            curve={true}
+            debug={false}
+            enabled={true}
+            onWaypointChange={handleWaypointChange}
+          />
+        )}
+        {activeCameraControl === 'debug' && <CameraPositionDebugger enabled={true} />}
         
         <Stats />
       </Canvas>
+      
+      <CameraControlPanel />
+      
+      {/* Navigation indicators */}
+      {activeCameraControl === 'scroll' && (
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          pointerEvents: 'none',
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          padding: '40px 0',
+          boxSizing: 'border-box',
+          zIndex: 50
+        }}>
+          {/* Up indicator */}
+          {currentWaypointIndex > 0 && (
+            <div style={{
+              alignSelf: 'center',
+              background: 'rgba(0,0,0,0.3)',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '20px',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              maxWidth: '200px',
+              textAlign: 'center',
+              margin: '0 auto'
+            }}>
+              <span style={{ fontSize: '20px' }}>↑</span>
+              <span>{cameraWaypoints[currentWaypointIndex - 1].name || "Previous"}</span>
+            </div>
+          )}
+          
+          <div style={{ flex: 1 }}></div>
+          
+          {/* Down indicator */}
+          {currentWaypointIndex < cameraWaypoints.length - 1 && (
+            <div style={{
+              alignSelf: 'center',
+              background: 'rgba(0,0,0,0.3)',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '20px',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              maxWidth: '200px',
+              textAlign: 'center',
+              margin: '0 auto'
+            }}>
+              <span>{cameraWaypoints[currentWaypointIndex + 1].name || "Next"}</span>
+              <span style={{ fontSize: '20px' }}>↓</span>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Current position indicator */}
+      {activeCameraControl === 'scroll' && (
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.5)',
+          color: 'white',
+          padding: '8px 16px',
+          borderRadius: '20px',
+          fontSize: '14px',
+          pointerEvents: 'none',
+          zIndex: 100
+        }}>
+          {cameraWaypoints[currentWaypointIndex].name || `Waypoint ${currentWaypointIndex + 1}`}
+        </div>
+      )}
     </div>
   );
 };
