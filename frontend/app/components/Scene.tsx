@@ -192,18 +192,6 @@ const SpaceEnvironment = () => {
           <sphereGeometry args={[70, 32, 32]} /> {/* Changed from primitive to direct geometry */}
           <meshBasicMaterial color="#150a30" transparent opacity={0.4} /> {/* Changed from primitive to direct material */}
         </mesh>
-        
-        {/* Colorful nebula accent - reduced geometry complexity */}
-        <mesh position={[-50, 20, -60]} rotation={[0, Math.PI / 4, 0]}>
-          <sphereGeometry args={[30, 24, 24]} /> {/* Changed from primitive to direct geometry */}
-          <meshBasicMaterial color="#4a1060" transparent opacity={0.25} /> {/* Changed from primitive to direct material */}
-        </mesh>
-        
-        {/* Blue nebula accent - reduced geometry complexity */}
-        <mesh position={[40, -10, -70]} rotation={[0, -Math.PI / 5, 0]}>
-          <sphereGeometry args={[25, 24, 24]} /> {/* Changed from primitive to direct geometry */}
-          <meshBasicMaterial color="#0a2050" transparent opacity={0.3} /> {/* Changed from primitive to direct material */}
-        </mesh>
       </group>
       
       {/* Use instanced mesh for dust particles - MAJOR performance improvement */}
@@ -756,30 +744,40 @@ const Scene = () => {
     name?: string;
   }> = [
     {
-      position: [5, 5, 7] as [number, number, number],
-      lookAt: [0, 0, 0] as [number, number, number],
-      name: "Overview"
+    position: [6, 3, 6],
+    lookAt: [-3, 0, -4],
+    name: "Battle Formation"
+  },
+    {
+    position: [-5, 7, 5],
+    lookAt: [-6, 2, 0],
+    name: "Fighter Wing"
+  },
+    {
+      position: [-12, 8, -5],
+      lookAt: [0, 0, 0],
+      name: "Dramatic Side Angle"
     },
     {
-      position: [0, 3, 10] as [number, number, number],
-      lookAt: [0, 0, 0] as [number, number, number],
-      name: "Front View"
+      position: [6, 1, -3],
+      lookAt: [0, 0.2, 0],
+      name: "Detailed Underside"
     },
     {
-      position: [10, 6, -5] as [number, number, number],
-      lookAt: [0, 0, 0] as [number, number, number],
-      name: "Side View"
+      position: [-8, 2, -8],
+      lookAt: [0, 0, 0],
+      name: "Fighter Squadron Perspective"
     },
     {
-      position: [3, 8, 3] as [number, number, number],
-      lookAt: [0, 0, 0] as [number, number, number],
-      name: "Top View"
+      position: [0, 15, 0],
+      lookAt: [0, 0.5, 0],
+      name: "Overhead Reveal"
     },
     {
-      position: [8, 1, 8] as [number, number, number],
-      lookAt: [0, 0.5, 0] as [number, number, number],
-      name: "Detail View"
-    }
+      position: [6, 3, 6],
+      lookAt: [-3, 0, -4],
+      name: "Back to Initial"
+    },
   ];
   
   // Handle waypoint change
