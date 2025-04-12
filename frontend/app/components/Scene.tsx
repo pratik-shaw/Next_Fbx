@@ -769,11 +769,6 @@ const Scene = () => {
       name: "Fighter Squadron Perspective"
     },
     {
-      position: [0, 15, 0],
-      lookAt: [0, 0.5, 0],
-      name: "Overhead Reveal"
-    },
-    {
       position: [6, 3, 6],
       lookAt: [-3, 0, -4],
       name: "Back to Initial"
