@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 import React, { useRef, useEffect, Suspense, useState, ReactNode, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
@@ -7,7 +6,6 @@ import { OrbitControls, Stats, Stars, Trail, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import Model from './Model';
 import Fighter from './Fighter';
-import CameraPositionDebugger from './CameraPositionDebugger';
 import ScrollableCameraController from './ScrollableCameraController';
 
 // Type definition for Fighter positions
@@ -35,11 +33,6 @@ interface FighterData {
   particlePositions: ParticlePosition[];
 }
 
-// Type definition for CameraRotation props
-interface CameraRotationProps {
-  speed?: number;
-}
-
 
 // Performance optimization - reusable geometries and materials
 const createReusableGeometries = () => {
@@ -47,48 +40,7 @@ const createReusableGeometries = () => {
   const particleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
   return { sphereGeometry, particleGeometry };
 };
-// Component to track and display current waypoint index
-const WaypointTracker = ({ waypoints, onChange }: { 
-  waypoints: Array<{
-    position: [number, number, number]; name?: string 
-}>, 
-  onChange: (index: number) => void 
-}) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const { camera } = useThree();
 
-  // Check which waypoint is closest to current camera position
-  useEffect(() => {
-    const checkWaypoint = () => {
-      const cameraPos = camera.position.clone();
-      let closestIndex = 0;
-      let closestDistance = Infinity;
-
-      waypoints.forEach((wp, index) => {
-        const waypointPos = new THREE.Vector3(...(wp.position as [number, number, number]));
-        const distance = cameraPos.distanceTo(waypointPos);
-        
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestIndex = index;
-        }
-      });
-
-      if (closestIndex !== currentIndex) {
-        setCurrentIndex(closestIndex);
-        onChange(closestIndex);
-      }
-    };
-
-    // Check initially and add a frame callback
-    checkWaypoint();
-    const interval = setInterval(checkWaypoint, 500);
-    
-    return () => clearInterval(interval);
-  }, [camera, waypoints, currentIndex, onChange]);
-
-  return null;
-};
 const createReusableMaterials = () => {
   const nebulaMaterials = [
     new THREE.MeshBasicMaterial({ color: "#150a30", transparent: true, opacity: 0.4 }),
@@ -214,48 +166,6 @@ interface MotionTrailProps {
   color?: string;
   attenuation?: (width: number) => number;
 }
-
-// Camera controller component
-// Update your CameraRotation component
-const CameraRotation = ({ speed = 0.05 }: CameraRotationProps) => {
-  const { camera } = useThree();
-  const orbitControlsRef = useRef<any>(null);
-  
-  // Set up initial position
-  useEffect(() => {
-    // Only set the initial position when the component mounts
-    camera.position.set(5, 5, 7);
-    camera.lookAt(0, 0, 0);
-  }, [camera]);
-  
-  // Animate camera rotation on each frame
-  useFrame(({ clock }) => {
-    if (orbitControlsRef.current) {
-      // Disable controls during automatic rotation
-      orbitControlsRef.current.enabled = false;
-      
-      const angle = clock.getElapsedTime() * speed;
-      const radius = Math.sqrt(camera.position.x ** 2 + camera.position.z ** 2);
-      
-      // Update camera position to rotate around the model
-      camera.position.x = Math.sin(angle) * radius;
-      camera.position.z = Math.cos(angle) * radius;
-      camera.lookAt(0, 0, 0);
-    }
-  });
-
-  return (
-    <OrbitControls 
-      ref={orbitControlsRef}
-      minPolarAngle={Math.PI / 6}
-      maxPolarAngle={Math.PI / 2.2}
-      enablePan={false}
-      enableZoom={true}
-      minDistance={2}
-      maxDistance={20}
-    />
-  );
-};
 
 // Motion trails component
 const MotionTrail = ({ 
@@ -726,10 +636,20 @@ const MainShipMovement = () => {
   );
 };
 
+// Update interface
+interface SceneBackgroundProps {
+  scrollPosition?: number; // Current scroll position (0 to 1)
+  showControls?: boolean; // Whether to show camera controls
+  waypointChangeHandler?: (index: number) => void; // Callback when waypoint changes
+}
 // Main Scene component with performance optimizations
-const Scene = () => {
-  // State for active camera control mode
-  const [activeCameraControl, setActiveCameraControl] = useState<'orbit' | 'scroll' | 'debug'>('orbit');
+const Scene: React.FC<SceneBackgroundProps> = ({ 
+  scrollPosition = 0, 
+  showControls = false,
+  waypointChangeHandler
+}) => {
+  // State for active camera control mode - default to scroll when used as background
+  const [activeCameraControl, setActiveCameraControl] = useState<'orbit' | 'scroll' | 'debug'>('scroll');
   
   // State to track current waypoint for UI
   const [currentWaypointIndex, setCurrentWaypointIndex] = useState(0);
@@ -744,15 +664,15 @@ const Scene = () => {
     name?: string;
   }> = [
     {
-    position: [6, 3, 6],
-    lookAt: [-3, 0, -4],
-    name: "Battle Formation"
-  },
+      position: [6, 3, 6],
+      lookAt: [-3, 0, -4],
+      name: "Battle Formation"
+    },
     {
-    position: [-5, 7, 5],
-    lookAt: [-6, 2, 0],
-    name: "Fighter Wing"
-  },
+      position: [-5, 7, 5],
+      lookAt: [-6, 2, 0],
+      name: "Fighter Wing"
+    },
     {
       position: [-12, 8, -5],
       lookAt: [0, 0, 0],
@@ -778,89 +698,44 @@ const Scene = () => {
   // Handle waypoint change
   const handleWaypointChange = (index: number) => {
     setCurrentWaypointIndex(index);
-  };
-  
-  // Camera control panel component
-  const CameraControlPanel = () => {
-    // Get waypoint names for display
-    const waypointNames = cameraWaypoints.map(wp => wp.name || "Unnamed Waypoint");
-    
-    return (
-      <div style={{
-        position: 'absolute',
-        bottom: '20px',
-        right: '20px',
-        background: 'rgba(0, 0, 0, 0.7)',
-        padding: '10px',
-        borderRadius: '5px',
-        color: 'white',
-        fontFamily: 'monospace',
-        zIndex: 100
-      }}>
-        <div style={{ marginBottom: '10px', fontWeight: 'bold' }}>Camera Controls</div>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-          <button
-            onClick={() => setActiveCameraControl('orbit')}
-            style={{
-              padding: '5px 10px',
-              background: activeCameraControl === 'orbit' ? '#4CAF50' : '#333',
-              border: 'none',
-              borderRadius: '3px',
-              color: 'white',
-              cursor: 'pointer'
-            }}
-          >
-            Orbit
-          </button>
-          <button
-            onClick={() => setActiveCameraControl('scroll')}
-            style={{
-              padding: '5px 10px',
-              background: activeCameraControl === 'scroll' ? '#2196F3' : '#333',
-              border: 'none',
-              borderRadius: '3px',
-              color: 'white',
-              cursor: 'pointer'
-            }}
-          >
-            Scroll
-          </button>
-          <button
-            onClick={() => setActiveCameraControl('debug')}
-            style={{
-              padding: '5px 10px',
-              background: activeCameraControl === 'debug' ? '#FF9800' : '#333',
-              border: 'none',
-              borderRadius: '3px',
-              color: 'white',
-              cursor: 'pointer'
-            }}
-          >
-            Debug
-          </button>
-        </div>
-        
-        {activeCameraControl === 'scroll' && (
-          <div style={{ fontSize: '12px', marginTop: '8px' }}>
-            <div><strong>Current:</strong> {waypointNames[currentWaypointIndex]}</div>
-            <div style={{ marginTop: '5px', fontSize: '11px', opacity: 0.8 }}>
-              {currentWaypointIndex > 0 && (
-                <span>Scroll ↑ for {waypointNames[currentWaypointIndex - 1]}</span>
-              )}
-              {currentWaypointIndex > 0 && currentWaypointIndex < cameraWaypoints.length - 1 && <br />}
-              {currentWaypointIndex < cameraWaypoints.length - 1 && (
-                <span>Scroll ↓ for {waypointNames[currentWaypointIndex + 1]}</span>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
+    if (waypointChangeHandler) {
+      waypointChangeHandler(index);
+    }
   };
 
+  // Calculate current waypoint based on scroll position when provided externally
+  // Calculate current waypoint based on scroll position when provided
+// In Scene.tsx, update the useEffect hook that handles scroll position
+useEffect(() => {
+  if (scrollPosition !== undefined && activeCameraControl === 'scroll') {
+    // Calculate waypoint index based on scroll position
+    const waypointCount = cameraWaypoints.length;
+    const segmentSize = 1 / (waypointCount - 1);
+    const calculatedIndex = Math.min(
+      Math.floor(scrollPosition / segmentSize),
+      waypointCount - 1
+    );
+    
+    // Only update if the calculated index has changed
+    if (calculatedIndex !== currentWaypointIndex) {
+      setCurrentWaypointIndex(calculatedIndex);
+    }
+  }
+}, [scrollPosition, cameraWaypoints.length, currentWaypointIndex, activeCameraControl]);
+  
   return (
-    <div style={{ width: '100%', height: '100vh', background: '#000000' }}>
-      <Canvas
+<div 
+  style={{ 
+    width: '100%', 
+    height: '100vh', 
+    position: 'fixed', 
+    top: 0, 
+    left: 0, 
+    zIndex: -1,
+    overflow: 'hidden' // Add this to prevent scrolling
+  }}
+  onWheel={(e) => activeCameraControl === 'scroll' && e.preventDefault()}
+>      <Canvas
         shadows
         camera={{ position: [5, 5, 7], fov: 35 }}
         gl={{ 
@@ -898,27 +773,24 @@ const Scene = () => {
         </Suspense>
         
         {/* Camera controls based on active mode */}
-        {activeCameraControl === 'orbit' && <CameraRotation speed={0.2} />}
         {activeCameraControl === 'scroll' && (
           <ScrollableCameraController
             waypoints={cameraWaypoints}
-            scrollThreshold={0.1}
-            transitionDuration={1200}
+            scrollThreshold={0.05}
+            transitionDuration={1000}
             curve={true}
-            debug={false}
             enabled={true}
             onWaypointChange={handleWaypointChange}
+            currentWaypoint={currentWaypointIndex}
           />
         )}
-        {activeCameraControl === 'debug' && <CameraPositionDebugger enabled={true} />}
         
-        <Stats />
+        {showControls && <Stats />}
       </Canvas>
       
-      <CameraControlPanel />
       
-      {/* Navigation indicators */}
-      {activeCameraControl === 'scroll' && (
+      {/* Navigation indicators - only show when controls are enabled */}
+      {showControls && activeCameraControl === 'scroll' && (
         <div style={{
           position: 'absolute',
           left: '50%',
@@ -980,8 +852,8 @@ const Scene = () => {
         </div>
       )}
       
-      {/* Current position indicator */}
-      {activeCameraControl === 'scroll' && (
+      {/* Current position indicator - only when controls are shown */}
+      {showControls && activeCameraControl === 'scroll' && (
         <div style={{
           position: 'absolute',
           top: '20px',
