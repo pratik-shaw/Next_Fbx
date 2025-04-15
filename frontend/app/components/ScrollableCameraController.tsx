@@ -72,7 +72,7 @@ const ScrollableCameraController: React.FC<ScrollableCameraControllerProps> = ({
     lastScrollTime: 0
   });
   
-  // Touch handler state
+  // Touch handler state - Updated with new reverseTouchDirection property
   const touchState = useRef({
     startY: 0,
     startX: 0,
@@ -80,7 +80,8 @@ const ScrollableCameraController: React.FC<ScrollableCameraControllerProps> = ({
     lastX: 0,
     accumulatedDistance: 0,
     touching: false,
-    lastTouchTime: 0
+    lastTouchTime: 0,
+    reverseTouchDirection: true // Set to true by default to reverse mobile direction
   });
   
   // Update the refs when state changes
@@ -94,6 +95,26 @@ const ScrollableCameraController: React.FC<ScrollableCameraControllerProps> = ({
   useEffect(() => {
     transitioningRef.current = isTransitioning;
   }, [isTransitioning]);
+  
+  // Add new useEffect to handle mobile direction fix
+  useEffect(() => {
+    // Listen for the custom event from HomePage to fix mobile direction
+    const handleFixMobileScroll = () => {
+      // Always set to true to reverse direction on mobile devices
+      touchState.current = {
+        ...touchState.current,
+        reverseTouchDirection: true
+      };
+    };
+    
+    window.addEventListener('fixMobileScroll', handleFixMobileScroll);
+    // Run it once on load - always reverse mobile direction
+    handleFixMobileScroll();
+    
+    return () => {
+      window.removeEventListener('fixMobileScroll', handleFixMobileScroll);
+    };
+  }, []);
   
   // Function to move to a specific waypoint - wrapped in useCallback
   const goToWaypoint = useCallback((index: number) => {
@@ -243,6 +264,7 @@ const ScrollableCameraController: React.FC<ScrollableCameraControllerProps> = ({
     if (event.touches.length === 1) {
       const touch = event.touches[0];
       touchState.current = {
+        ...touchState.current,
         startY: touch.clientY,
         startX: touch.clientX,
         lastY: touch.clientY,
@@ -257,6 +279,7 @@ const ScrollableCameraController: React.FC<ScrollableCameraControllerProps> = ({
     }
   }, [enabled, externalControl]);
   
+  // Updated handleTouchMove with completely reversed direction logic
   const handleTouchMove = useCallback((event: TouchEvent) => {
     if (externalControl) return;
     if (!enabled || !touchState.current.touching || transitioningRef.current) return;
@@ -267,22 +290,17 @@ const ScrollableCameraController: React.FC<ScrollableCameraControllerProps> = ({
       const deltaX = touchState.current.lastX - touch.clientX;
       
       // Use primarily vertical movement, but check that horizontal movement isn't dominant
-      // This helps prevent navigation during horizontal swipes
       if (Math.abs(deltaY) > Math.abs(deltaX) * 0.8) {
-        // Determine direction (positive = down, negative = up)
-        const direction = deltaY > 0 ? -1 : 1; // Reversed from wheel (up swipe = previous)
+        // COMPLETELY REVERSED DIRECTION: swipe down = go up, swipe up = go down
+        // Change from -1:1 to 1:-1 in this line
+        const direction = deltaY > 0 ? 1 : -1;
         
-        // Normalize the delta for consistency - divide by a larger number for touch sensitivity
         const normalizedDelta = Math.abs(deltaY) / 150;
-        
-        // Accumulate distance for this touch movement
         touchState.current.accumulatedDistance += normalizedDelta;
         
-        // Only trigger navigation if we've moved enough
         if (touchState.current.accumulatedDistance > scrollThreshold * 0.5) {
           const navigated = navigate(direction, touchState.current.accumulatedDistance);
           if (navigated) {
-            // Reset accumulated distance after navigation
             touchState.current.accumulatedDistance = 0;
           }
         }
@@ -298,6 +316,7 @@ const ScrollableCameraController: React.FC<ScrollableCameraControllerProps> = ({
     }
   }, [enabled, externalControl, navigate, scrollThreshold]);
   
+  // Also update handleTouchEnd to reverse direction for swipes
   const handleTouchEnd = useCallback((event: TouchEvent) => {
     if (!enabled) return;
     
@@ -309,8 +328,9 @@ const ScrollableCameraController: React.FC<ScrollableCameraControllerProps> = ({
       
       // If this was a fast, mostly vertical swipe
       if (timeDelta < 300 && Math.abs(totalDeltaY) > 50 && Math.abs(totalDeltaY) > Math.abs(totalDeltaX) * 1.5) {
-        // Determine direction (positive = down, negative = up) - reversed for touch
-        const direction = totalDeltaY > 0 ? -1 : 1;
+        // REVERSED DIRECTION for quick swipes too
+        // Change from -1:1 to 1:-1 here
+        const direction = totalDeltaY > 0 ? 1 : -1;
         
         // Use a larger threshold for quick swipes
         navigate(direction, scrollThreshold * 1.2);
